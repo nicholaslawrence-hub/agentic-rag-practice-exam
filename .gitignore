@@ -1,0 +1,40 @@
+﻿# ── Secrets & env ─────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+config.env
+*.pem
+
+# ── Generated data (never commit course materials or generated PDFs) ──────────
+data/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.cache/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# ── Node / Next.js ────────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.vercel/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ── Claude Code project memory (local only) ──────────────────────────────────
+.claude/

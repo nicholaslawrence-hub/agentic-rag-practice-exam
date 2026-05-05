@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --berkeley-blue: #003262;
+  --california-gold: #FDB515;
+}

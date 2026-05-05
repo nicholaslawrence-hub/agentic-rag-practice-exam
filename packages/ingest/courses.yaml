@@ -1,0 +1,34 @@
+# Course registry — add each MCB course you want to index here.
+# Run: python -m ingest sync --course <id>
+
+courses:
+  mcb102:
+    name: "MCB 102 — Survey of Biochemistry"
+    color: "#003262"
+    sources:
+      slides:
+        - "data/mcb102/slides/"      # all .pptx in this folder are ingested
+      handouts:
+        - "data/mcb102/handouts/"    # all .docx in this folder
+    topic_map:
+      1: "biochemistry_overview"
+      2: "amino_acids_proteins"
+      3: "enzyme_kinetics"
+      4: "metabolism_glycolysis"
+      5: "tca_cycle"
+      6: "oxidative_phosphorylation"
+      7: "lipid_metabolism"
+      8: "nucleotide_metabolism"
+      9: "dna_replication"
+      10: "transcription"
+      11: "translation"
+      12: "regulation"
+
+  # Uncomment and fill in for additional courses:
+  # mcb110:
+  #   name: "MCB 110 — Molecular Biology"
+  #   sources:
+  #     slides:
+  #       - "data/mcb110/slides/"
+  #     handouts: []
+  #   topic_map: {}

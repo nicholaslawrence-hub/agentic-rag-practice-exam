@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: mcb-tutor-api
+    runtime: docker
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX
+        value: mcb-tutor
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: mcb-tutor
+      - key: DATABASE_URL
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: DAILY_MESSAGE_QUOTA
+        value: "50"
