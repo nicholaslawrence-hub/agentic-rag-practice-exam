@@ -365,13 +365,12 @@ def _pdf_to_previews(pdf_path: Path, exam_id: str) -> list[str]:
 def generate_practice_exam(
     course_id: str,
     course_name: str,
-    retrieved_chunks: list,           # list[RetrievedChunk] — used as context
+    context_texts: list[str],
     topics: list[str],
     difficulty: str = "medium",
     num_questions: int = 10,
     question_types: list[str] | None = None,
     purpose: str = "review",
-    extra_context: list[str] | None = None,
 ) -> dict:
     """Generate a practice exam PDF.
 
@@ -384,9 +383,6 @@ def generate_practice_exam(
     exam_id = uuid.uuid4().hex[:10]
     pdf_path = EXAMS_DIR / f"{course_id}_{exam_id}.pdf"
 
-    context_texts = [c.text for c in retrieved_chunks] + (extra_context or [])
-
-    # Step 1 — LLM generates structured question data (JSON only)
     raw_questions = _generate_questions_json(
         course_name=course_name,
         course_id=course_id,

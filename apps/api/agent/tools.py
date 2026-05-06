@@ -1,42 +1,11 @@
-"""Agent tools: Pinecone search and matplotlib diagram creator.
-
-Tool schemas follow the Anthropic tool_use format.
-"""
+"""Diagram creator tool for cheatsheet generation."""
 
 from __future__ import annotations
 
-import os
 import uuid
 from pathlib import Path
 
-from openai import OpenAI
-from pinecone import Pinecone
-
-from apps.api.agent.state import RetrievedChunk
-
-_oai = OpenAI()
-_pc: Pinecone | None = None
-_index = None
-
 DIAGRAMS_DIR = Path("data/diagrams")
-
-# ── Anthropic tool schemas ─────────────────────────────────────────────────────
-
-SEARCH_TOOL_SCHEMA = {
-    "name": "search",
-    "description": (
-        "Search for additional relevant course material chunks from Pinecone. "
-        "Use this when the initial retrieval is missing important topics."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "query": {"type": "string", "description": "Focused search query"},
-            "top_k": {"type": "integer", "description": "Number of results (max 12)", "default": 8},
-        },
-        "required": ["query"],
-    },
-}
 
 CREATE_DIAGRAM_TOOL_SCHEMA = {
     "name": "create_diagram",
@@ -85,65 +54,6 @@ CREATE_DIAGRAM_TOOL_SCHEMA = {
     },
 }
 
-FINALIZE_TOOL_SCHEMA = {
-    "name": "finalize_ranking",
-    "description": "Submit the final ordered list of chunk IDs to use for generation.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "chunk_ids": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Chunk IDs ordered by relevance (most relevant first, max 16)",
-            }
-        },
-        "required": ["chunk_ids"],
-    },
-}
-
-
-# ── Pinecone search ────────────────────────────────────────────────────────────
-
-def _get_index():
-    global _pc, _index
-    if _index is None:
-        _pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-        _index = _pc.Index(os.environ.get("PINECONE_INDEX", "mcb-tutor"))
-    return _index
-
-
-def search(query: str, course: str, top_k: int = 8) -> list[RetrievedChunk]:
-    """Embed query and query Pinecone for additional relevant chunks."""
-    embedding = (
-        _oai.embeddings.create(model="text-embedding-3-large", input=query)
-        .data[0].embedding
-    )
-    results = _get_index().query(
-        vector=embedding,
-        top_k=min(top_k, 12),
-        namespace=course,
-        include_metadata=True,
-    )
-    chunks: list[RetrievedChunk] = []
-    for match in results.matches:
-        meta = match.metadata or {}
-        chunks.append(RetrievedChunk(
-            chunk_id=match.id,
-            text=meta.get("text", ""),
-            doc_type=meta.get("doc_type", ""),
-            source=meta.get("source", ""),
-            title=meta.get("title", ""),
-            score=match.score,
-            slide_num=meta.get("slide_num"),
-            slide_image_url=meta.get("slide_image_url"),
-            heading_path=meta.get("heading_path"),
-            week=meta.get("week"),
-            topic=meta.get("topic"),
-        ))
-    return chunks
-
-
-# ── Diagram creator ────────────────────────────────────────────────────────────
 
 def create_diagram(
     diagram_type: str,
@@ -186,14 +96,12 @@ def _draw_table(ax, headers: list[str], rows: list[list[str]]) -> None:
     n_cols = len(headers)
     col_w = 1.0 / n_cols
 
-    # Header row
     for j, h in enumerate(headers):
         ax.add_patch(plt.Rectangle((j * col_w, 0.85), col_w, 0.13,
                                    facecolor="#003262", transform=ax.transAxes, clip_on=False))
         ax.text((j + 0.5) * col_w, 0.915, h, ha="center", va="center",
                 fontsize=7, fontweight="bold", color="white", transform=ax.transAxes)
 
-    # Data rows
     n_rows = min(len(rows), 6)
     row_h = 0.85 / n_rows if n_rows else 0.85
     for i, row in enumerate(rows[:n_rows]):

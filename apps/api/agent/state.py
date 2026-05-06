@@ -1,24 +1,9 @@
-"""Shared state for the MCB Tutor pipeline — dataclasses + LangGraph TypedDict."""
+"""Shared state for the MCB Tutor pipeline."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TypedDict
-
-
-@dataclass
-class RetrievedChunk:
-    chunk_id: str
-    text: str
-    doc_type: str       # "slide" | "handout"
-    source: str
-    title: str
-    score: float
-    slide_num: int | None = None
-    slide_image_url: str | None = None
-    heading_path: str | None = None
-    week: int | None = None
-    topic: str | None = None
 
 
 @dataclass
@@ -47,7 +32,6 @@ class AgentState(TypedDict, total=False):
     user_id: str
     user_doc_texts: list[str]
     intent: str
-    retrieved: list          # list[RetrievedChunk]
     draft: str
     citations: list
     attachments: list

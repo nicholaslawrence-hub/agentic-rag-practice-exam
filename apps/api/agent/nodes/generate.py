@@ -1,15 +1,21 @@
-"""Generate practice exam or cheatsheet PDF."""
+"""Generate practice exam or cheatsheet PDF.
+
+Retrieval is handled by Pinecone Assistant — no manual embedding or reranking.
+"""
 
 from __future__ import annotations
 
 import json
+import os
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
 from anthropic import Anthropic
+from pinecone import Pinecone
 
 from apps.api.agent.nodes.route import CHEAT_Q_MARKER, EXAM_Q_MARKER
-from apps.api.agent.state import Attachment, RetrievedChunk
+from apps.api.agent.state import Attachment
 
 _client = Anthropic()
 
@@ -25,6 +31,35 @@ def _course_name(course_id: str) -> str:
         except Exception:
             _courses_cache = {}
     return _courses_cache.get(course_id, {}).get("name", course_id)
+
+
+@lru_cache(maxsize=1)
+def _get_assistant():
+    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+    name = os.environ.get("PINECONE_ASSISTANT_NAME", "mcb-tutor")
+    return pc.assistant.Assistant(assistant_name=name)
+
+
+def _retrieve_context(topics: list[str], weeks: list[int] | None = None) -> list[str]:
+    """Ask Pinecone Assistant for relevant course content and extract citation passages."""
+    topic_str = ", ".join(topics) if topics and topics != ["all"] else "all major topics"
+    query = f"Provide detailed notes on: {topic_str}"
+    if weeks:
+        query += f" (weeks {', '.join(str(w) for w in weeks)})"
+
+    resp = _get_assistant().chat(messages=[{"role": "user", "content": query}])
+
+    passages: list[str] = []
+    for citation in (resp.citations or []):
+        for ref in citation.references:
+            if getattr(ref, "content", None):
+                passages.append(ref.content)
+
+    # Fall back to the assistant's synthesised answer if no raw citations
+    if not passages and resp.message and resp.message.content:
+        passages.append(resp.message.content)
+
+    return passages
 
 
 # -- Questionnaires -----------------------------------------------------------
@@ -138,10 +173,10 @@ _CHEAT_TOOL = {
 
 # -- Tool dispatcher ----------------------------------------------------------
 
-def _dispatch_tool(name: str, tool_input: dict, state: dict) -> str:
+def _dispatch_tool(name: str, tool_input: dict, state: dict, context_texts: list[str]) -> str:
     course_id = state.get("course", "")
-    retrieved: list[RetrievedChunk] = state.get("retrieved", [])
     user_doc_texts: list[str] = state.get("user_doc_texts", [])
+    all_context = context_texts + user_doc_texts
 
     if name == "generate_practice_exam":
         from apps.api.skills.practice_exam import generate_practice_exam
@@ -149,8 +184,7 @@ def _dispatch_tool(name: str, tool_input: dict, state: dict) -> str:
         result = generate_practice_exam(
             course_id=course_id,
             course_name=_course_name(course_id),
-            retrieved_chunks=retrieved,
-            extra_context=user_doc_texts,
+            context_texts=all_context,
             topics=tool_input.get("topics", ["all"]),
             difficulty=tool_input.get("difficulty", "medium"),
             num_questions=tool_input.get("num_questions", 10),
@@ -165,8 +199,7 @@ def _dispatch_tool(name: str, tool_input: dict, state: dict) -> str:
         result = generate_cheatsheet(
             course_id=course_id,
             course_name=_course_name(course_id),
-            retrieved_chunks=retrieved,
-            extra_context=user_doc_texts,
+            context_texts=all_context,
             topics=tool_input.get("topics", ["all"]),
             exam_type=tool_input.get("exam_type", "review"),
             content_focus=tool_input.get("content_focus", "comprehensive"),
@@ -187,7 +220,7 @@ def _dispatch_tool(name: str, tool_input: dict, state: dict) -> str:
     return json.dumps({"pdf_url": result["pdf_url"], "status": "generated"})
 
 
-def _run_generation(tool: dict, config_summary: str, done_system: str, state: dict) -> dict:
+def _run_generation(tool: dict, config_summary: str, done_system: str, state: dict, context_texts: list[str]) -> dict:
     """Force a tool call, run the skill, return a friendly completion message."""
     seed = [{"role": "user", "content": f"{config_summary} Call {tool['name']} now."}]
 
@@ -205,7 +238,7 @@ def _run_generation(tool: dict, config_summary: str, done_system: str, state: di
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
-                "content": _dispatch_tool(block.name, block.input, state),
+                "content": _dispatch_tool(block.name, block.input, state, context_texts),
             })
 
     final = _client.messages.create(
@@ -259,12 +292,13 @@ def generate_node(state: dict) -> dict:
             "num_questions": 10, "question_types": ["mcq", "short_answer", "multi_part"],
             "purpose": "review",
         })
+        context_texts = _retrieve_context(cfg["topics"], cfg.get("weeks") or None)
         summary = (
             f"Generate a practice exam: topics={cfg['topics']}, "
             f"difficulty={cfg['difficulty']}, num_questions={cfg['num_questions']}, "
             f"question_types={cfg['question_types']}, purpose={cfg.get('purpose', 'review')}."
         )
-        return _run_generation(_EXAM_TOOL, summary, _EXAM_DONE_SYSTEM, state)
+        return _run_generation(_EXAM_TOOL, summary, _EXAM_DONE_SYSTEM, state, context_texts)
 
     if intent == "cheatsheet":
         return {"draft": _CHEAT_QUESTIONNAIRE, "citations": [], "attachments": []}
@@ -274,11 +308,12 @@ def generate_node(state: dict) -> dict:
             "topics": ["all"], "weeks": [], "exam_type": "review",
             "content_focus": "comprehensive",
         })
+        context_texts = _retrieve_context(cfg["topics"], cfg.get("weeks") or None)
         summary = (
             f"Generate a cheatsheet: topics={cfg['topics']}, "
             f"exam_type={cfg.get('exam_type', 'review')}, "
             f"content_focus={cfg.get('content_focus', 'comprehensive')}."
         )
-        return _run_generation(_CHEAT_TOOL, summary, _CHEAT_DONE_SYSTEM, state)
+        return _run_generation(_CHEAT_TOOL, summary, _CHEAT_DONE_SYSTEM, state, context_texts)
 
     return {"draft": _UNKNOWN_MSG, "citations": [], "attachments": []}
