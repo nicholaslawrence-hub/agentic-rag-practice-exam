@@ -482,11 +482,10 @@ def _pdf_to_previews(pdf_path: Path, sheet_id: str) -> list[str]:
 def generate_cheatsheet(
     course_id: str,
     course_name: str,
-    retrieved_chunks: list,
+    context_texts: list[str],
     topics: list[str],
     exam_type: str = "review",
     content_focus: str = "comprehensive",
-    extra_context: list[str] | None = None,
 ) -> dict:
     """Generate a 3-column front/back cheatsheet PDF with auto-optimised font size.
 
@@ -496,7 +495,6 @@ def generate_cheatsheet(
     sheet_id = uuid.uuid4().hex[:10]
     pdf_path = SHEETS_DIR / f"{course_id}_{sheet_id}.pdf"
 
-    context_texts = [c.text for c in retrieved_chunks] + (extra_context or [])
     raw = _generate_cheatsheet_json(
         course_name=course_name,
         topics=topics,
